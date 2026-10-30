@@ -1,0 +1,22 @@
+# Build artifacts
+Build/
+bootx64.efi
+*.efi
+*.o
+*.obj
+
+# PyInstaller
+dist/
+build/
+*.spec
+__pycache__/
+*.pyc
+
+# Payload (секретно)
+payload/locker_button.py
+payload/assets/
+payload/scream.mp3
+
+# EDK2
+edk2/
+Conf/
