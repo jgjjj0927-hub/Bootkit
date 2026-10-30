@@ -1,0 +1,41 @@
+## @file
+# QackLocker EFI Application
+##
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = QackLockerEfi
+  FILE_GUID                      = 7a6b5c4d-3e2f-1a0b-9c8d-7e6f5a4b3c2d
+  MODULE_TYPE                    = UEFI_APPLICATION
+  VERSION_STRING                 = 1.0
+  ENTRY_POINT                    = UefiMain
+
+[Sources]
+  QackLockerEfi.cpp
+
+[Packages]
+  MdePkg/MdePkg.dec
+  MdeModulePkg/MdeModulePkg.dec
+  QackLockerPkg/QackLockerPkg.dec
+
+[LibraryClasses]
+  UefiApplicationEntryPoint
+  UefiLib
+  UefiBootServicesTableLib
+  UefiRuntimeServicesTableLib
+  BaseMemoryLib
+  MemoryAllocationLib
+  DevicePathLib
+  FileHandleLib
+  PrintLib
+
+[Guids]
+  gEfiGlobalVariableGuid
+
+[Protocols]
+  gEfiLoadedImageProtocolGuid
+  gEfiSimpleFileSystemProtocolGuid
+  gEfiDevicePathProtocolGuid
+
+[BuildOptions]
+  MSFT:*_*_*_CC_FLAGS = /EHsc- /GR- /std:c++17
+  GCC:*_*_*_CC_FLAGS = -fno-exceptions -fno-rtti -fno-use-cxa-atexit -std=c++17
